@@ -83,6 +83,47 @@ class EcommerceBot(ActivityHandler):
                 await turn_context.send_activity(f"⚠️ Erro ao buscar seus pedidos.")
 
             return
+        
+        elif "extrato" in user_input:
+            try:
+                async with httpx.AsyncClient() as client:
+                    
+                    response = await client.get(f"{API_BASE_URL}/users/")
+                    response.raise_for_status()
+                    users = response.json()
+
+                    matched_user = next(
+                        (u for u in users if u["email"].lower() == user_email.lower()), None
+                    )
+                    if not matched_user:
+                        await turn_context.send_activity("❌ Usuário não encontrado. Verifique o e-mail.")
+                        return
+
+                    user_id = matched_user["id"]
+
+                    
+                    response = await client.get(f"{API_BASE_URL}/users/{user_id}/cards/")
+                    response.raise_for_status()
+                    cards = response.json()
+
+                    if not cards:
+                        await turn_context.send_activity("💳 Nenhum cartão encontrado.")
+                        return
+
+                    msg = "💳 Seus cartões:\n\n"
+                    for card in cards:
+                        numero = card['number']
+                        numero_oculto = f"{'*' * (len(numero) - 4)}{numero[-4:]}"  
+                        msg += (
+                            f"- Número: `{numero_oculto}`\n"
+                            f"  📆 Validade: {card['expiration_date']}\n"
+                            f"  💰 Saldo: R$ {card['balance']:.2f}\n\n"
+                        )
+                    await turn_context.send_activity(msg)
+
+            except Exception:
+                await turn_context.send_activity("⚠️ Erro ao buscar seus cartões.")
+            return
 
         await turn_context.send_activity(
             "🤖 Comando não reconhecido. Digite `produtos`, `pedidos` ou `sair`."
@@ -90,3 +131,4 @@ class EcommerceBot(ActivityHandler):
 
     async def on_turn(self, turn_context: TurnContext):
         await super().on_turn(turn_context)
+        await self.conversation_state.save_changes(turn_context)
