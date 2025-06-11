@@ -37,10 +37,56 @@ class EcommerceBot(ActivityHandler):
                 await turn_context.send_activity("⚠️ Erro ao verificar o e-mail. Tente novamente mais tarde.")
             return
 
+        if "produto" in user_input:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(f"{API_BASE_URL}/products/")
+                    response.raise_for_status()
+                    products = response.json()
+
+                if not products:
+                    await turn_context.send_activity("📦 Nenhum produto disponível.")
+                    return
+
+                product_list = "\n".join([f"- {p['productName']} — R$ {p['price']:.2f}" for p in products])
+                await turn_context.send_activity(f"🛒 Produtos disponíveis:\n{product_list}")
+            except Exception:
+                await turn_context.send_activity("⚠️ Erro ao consultar os produtos.")
+            return
+
+        elif "pedido" in user_input:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(f"{API_BASE_URL}/orders/")
+                    response.raise_for_status()
+                    orders = response.json()
+
+                user_orders = [
+                    o for o in orders
+                    if o.get("user_email", "").lower() == user_email.lower()
+                ]
+
+                if not user_orders:
+                    await turn_context.send_activity("📭 Você ainda não tem pedidos.")
+                    return
+
+                reply = f"📦 Seus pedidos ({user_email}):\n"
+                for o in user_orders:
+                    reply += (
+                        f"- ID: `{o['_id']}`\n"
+                        f"  💰 Total: R$ {o['total_price']:.2f}\n"
+                        f"  📌 Status: {o['status']}\n"
+                        f"  📅 Data: {o['created_at'][:10]}\n\n"
+                    )
+                await turn_context.send_activity(reply)
+            except Exception as e:
+                await turn_context.send_activity(f"⚠️ Erro ao buscar seus pedidos.")
+
+            return
+
         await turn_context.send_activity(
             "🤖 Comando não reconhecido. Digite `produtos`, `pedidos` ou `sair`."
         )
 
     async def on_turn(self, turn_context: TurnContext):
         await super().on_turn(turn_context)
-        await self.conversation_state.save_changes(turn_context)
